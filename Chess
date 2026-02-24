@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mein Schachspiel</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            margin-top: 50px;
+        }
+        #myBoard {
+            width: 400px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Schach: Du gegen Zufalls-KI</h1>
+    
+    <div id="myBoard"></div>
+    
+    <button id="resetBtn">Neues Spiel starten</button>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+    <script>
+        // Spiel-Variablen initialisieren
+        var board = null;
+        var game = new Chess();
+
+        // Einfache "KI", die einen zufälligen, gültigen Zug macht
+        function makeRandomMove() {
+            var possibleMoves = game.moves();
+
+            // Spiel vorbei?
+            if (possibleMoves.length === 0) {
+                if (game.in_checkmate()) {
+                    alert('Schachmatt! Du hast gewonnen!');
+                } else {
+                    alert('Unentschieden!');
+                }
+                return;
+            }
+
+            var randomIdx = Math.floor(Math.random() * possibleMoves.length);
+            game.move(possibleMoves[randomIdx]);
+            board.position(game.fen());
+            
+            // Überprüfen, ob die KI dich schachmatt gesetzt hat
+            if (game.in_checkmate()) {
+                setTimeout(function() { alert('Schachmatt! Der Computer hat gewonnen!'); }, 250);
+            }
+        }
+
+        // Verhindern, dass schwarze Figuren gezogen werden oder Züge nach Spielende gemacht werden
+        function onDragStart(source, piece, position, orientation) {
+            if (game.game_over()) return false;
+            // Nur weiße Figuren dürfen bewegt werden (Weiß beginnt immer mit 'w')
+            if (piece.search(/^b/) !== -1) return false;
+        }
+
+        // Wird aufgerufen, wenn eine Figur losgelassen wird
+        function onDrop(source, target) {
+            // Zug auf Gültigkeit prüfen
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // Bauern werden immer automatisch zur Dame umgewandelt
+            });
+
+            // Wenn der Zug ungültig ist, springt die Figur zurück
+            if (move === null) return 'snapback';
+
+            // Wenn der Zug gültig war, macht der Computer nach kurzer Pause seinen Zug
+            window.setTimeout(makeRandomMove, 250);
+        }
+
+        // Brett updaten, nachdem die Figur eingerastet ist (wichtig für Rochade und En Passant)
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        // Konfiguration für das visuelle Brett
+        var config = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd,
+            // Holt sich die Bilder der Schachfiguren direkt aus dem Netz
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+        };
+
+        // Brett aufbauen
+        board = Chessboard('myBoard', config);
+
+        // Reset-Button Logik
+        $('#resetBtn').on('click', function() {
+            game.reset();
+            board.start();
+        });
+    </script>
+</body>
+</html>
