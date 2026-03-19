@@ -1,0 +1,708 @@
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { 
+  Mic, 
+  MicOff, 
+  AlertOctagon, 
+  UserX, 
+  History, 
+  ShieldAlert, 
+  Info, 
+  Play,
+  Gavel,
+  BellRing,
+  Timer,
+  Search,
+  Vote,
+  Pause,
+  Check,
+  X as XIcon,
+  Minus,
+  ListOrdered,
+  BookOpen,
+  BarChart3,
+  Users,
+  Clock,
+  ChevronRight,
+  PlusCircle
+} from 'lucide-react';
+
+// --- Konfiguration & Mock-Daten ---
+const REAL_MDBS = {
+  linke: ['Janine Wissler', 'Martin Schirdewan', 'Gregor Gysi', 'Dietmar Bartsch', 'Heidi Reichinnek', 'Sören Pellmann', 'Clara Bünger', 'Gesine Lötzsch', 'Caren Lay', 'Christian Görke'],
+  spd: ['Olaf Scholz', 'Lars Klingbeil', 'Saskia Esken', 'Rolf Mützenich', 'Boris Pistorius', 'Karl Lauterbach', 'Hubertus Heil', 'Nancy Faeser', 'Bärbel Bas', 'Michael Roth', 'Katja Mast', 'Kevin Kühnert', 'Eva Högl', 'Nils Schmid', 'Aydan Özoğuz', 'Karamba Diaby'],
+  gruene: ['Robert Habeck', 'Annalena Baerbock', 'Katharina Dröge', 'Britta Haßelmann', 'Cem Özdemir', 'Anton Hofreiter', 'Steffi Lemke', 'Lisa Paus', 'Omid Nouripour', 'Ricarda Lang', 'Katrin Göring-Eckardt', 'Konstantin von Notz', 'Sven Lehmann', 'Dieter Janecek'],
+  ssw: ['Stefan Seidler'],
+  cdu: ['Friedrich Merz', 'Alexander Dobrindt', 'Carsten Linnemann', 'Jens Spahn', 'Thorsten Frei', 'Philipp Amthor', 'Julia Klöckner', 'Dorothee Bär', 'Andrea Lindholz', 'Johann Wadephul', 'Mathias Middelberg', 'Nadine Schön', 'Norbert Röttgen', 'Roderich Kiesewetter', 'Serap Güler', 'Gitta Connemann', 'Christoph Ploß', 'Tilman Kuban'],
+  afd: ['Alice Weidel', 'Tino Chrupalla', 'Bernd Baumann', 'Beatrix von Storch', 'Stephan Brandner', 'Leif-Erik Holm', 'Karsten Hilse', 'Rüdiger Lucassen', 'Martin Reichardt', 'René Springer', 'Peter Boehringer', 'Gottfried Curio', 'Marc Jongen', 'Martin Hess']
+};
+
+const FALLBACK_LAST_NAMES = [
+  'Müller', 'Schmidt', 'Schneider', 'Fischer', 'Weber', 'Meyer', 'Wagner', 
+  'Becker', 'Schulz', 'Hoffmann', 'Schäfer', 'Koch', 'Bauer', 'Richter', 
+  'Klein', 'Wolf', 'Schröder', 'Neumann', 'Schwarz', 'Zimmermann', 'Braun', 'Krüger',
+  'Hofmann', 'Hartmann', 'Lange', 'Schmitt', 'Werner', 'Krause', 'Meier', 'Sommer'
+];
+
+const GOV_NAMES = [
+  'Friedrich Merz (Bundeskanzler)', 'Bundesminister/in für Wirtschaft', 'Bundesminister/in der Finanzen',
+  'Bundesminister/in des Auswärtigen', 'Bundesminister/in des Innern', 'Bundesminister/in der Verteidigung',
+  'Bundesminister/in der Justiz', 'Bundesminister/in für Arbeit und Soziales', 'Bundesminister/in für Gesundheit',
+  'Bundesminister/in für Verkehr', 'Bundesminister/in für Bildung', 'Bundesminister/in für Umwelt',
+  'Bundesminister/in für Landwirtschaft', 'Bundesminister/in für Familie', 'Chef/in des Bundeskanzleramts'
+];
+
+const BUNDESRAT_NAMES = [
+  'Vertreter/in BW', 'Vertreter/in BY', 'Vertreter/in BE', 'Vertreter/in BB', 'Vertreter/in HB', 'Vertreter/in HH',
+  'Vertreter/in HE', 'Vertreter/in MV', 'Vertreter/in NI', 'Vertreter/in NW', 'Vertreter/in RP', 'Vertreter/in SL',
+  'Vertreter/in SN', 'Vertreter/in ST', 'Vertreter/in SH', 'Vertreter/in TH'
+];
+
+const INITIAL_AGENDA = [
+  { id: 1, top: '1', title: 'Regierungserklärung des Bundeskanzlers', status: 'completed' },
+  { id: 2, top: '2', title: 'Befragung der Bundesregierung', status: 'active' },
+  { id: 3, top: '3', title: 'Erste Beratung Entwurf Haushaltsgesetz', status: 'pending' },
+  { id: 4, top: '4', title: 'Antrag: Stärkung der inneren Sicherheit', status: 'pending' },
+  { id: 5, top: 'Z', title: 'Zusatzpunkt: Aktuelle Stunde', status: 'pending' }
+];
+
+export default function BundestagDashboard() {
+  // --- Global State ---
+  const [activeTab, setActiveTab] = useState('plenum'); // plenum, agenda, speakers, stats
+  const [sessionInfo] = useState({ number: 104, president: 'Bärbel Bas' });
+  
+  const [seats, setSeats] = useState([]);
+  const [selectedSeatId, setSelectedSeatId] = useState(null);
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const [protocol, setProtocol] = useState([]);
+  
+  // Feature States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [bellRinging, setBellRinging] = useState(false);
+  const [timer, setTimer] = useState({ active: false, seconds: 300 }); 
+  const [votingMode, setVotingMode] = useState(false);
+  const [votingResults, setVotingResults] = useState(null);
+  
+  // Neue States
+  const [agenda, setAgenda] = useState(INITIAL_AGENDA);
+  const [speakerQueue, setSpeakerQueue] = useState([]); // Array von Seat IDs
+  const [speakingTimes, setSpeakingTimes] = useState({}); // Tracking der Redezeit pro Fraktion
+
+  const protocolEndRef = useRef(null);
+
+  // --- Initialisierung des Plenarsaals ---
+  useMemo(() => {
+    const FACTION_DEFS = {
+      linke: { id: 'linke', name: 'Die Linke', color: '#9f1239' },
+      spd: { id: 'spd', name: 'SPD', color: '#dc2626' },
+      gruene: { id: 'gruene', name: 'Bündnis 90/Die Grünen', color: '#16a34a' },
+      ssw: { id: 'ssw', name: 'SSW', color: '#003087' },
+      cdu: { id: 'cdu', name: 'CDU/CSU', color: '#1f2937' },
+      afd: { id: 'afd', name: 'AfD', color: '#2563eb' }
+    };
+
+    const factionSequence = [
+      ...Array(64).fill(FACTION_DEFS.linke),
+      ...Array(120).fill(FACTION_DEFS.spd),
+      ...Array(85).fill(FACTION_DEFS.gruene),
+      ...Array(1).fill(FACTION_DEFS.ssw),
+      ...Array(208).fill(FACTION_DEFS.cdu),
+      ...Array(152).fill(FACTION_DEFS.afd)
+    ];
+
+    const rowCapacities = [20, 26, 32, 38, 44, 50, 55, 61, 67, 73, 79, 85];
+    let geometricSeats = [];
+    const centerX = 500;
+    const centerY = 530;
+
+    rowCapacities.forEach((capacity, rowIndex) => {
+      const radius = 130 + rowIndex * 32; 
+      for (let s = 0; s < capacity; s++) {
+        const startAngle = Math.PI * 0.96; 
+        const endAngle = Math.PI * 0.04;   
+        const fraction = capacity > 1 ? s / (capacity - 1) : 0.5;
+        const angle = startAngle - fraction * (startAngle - endAngle);
+        
+        geometricSeats.push({ 
+          x: centerX + radius * Math.cos(angle), 
+          y: centerY - radius * Math.sin(angle), 
+          angle: (angle * 180) / Math.PI, 
+          row: rowIndex + 1 
+        });
+      }
+    });
+
+    geometricSeats.sort((a, b) => (b.angle - a.angle) || (a.row - b.row));
+
+    const factionCounters = { linke: 0, spd: 0, gruene: 0, ssw: 0, cdu: 0, afd: 0 };
+    let globalIdCounter = 1;
+
+    const generatedSeats = geometricSeats.map((geo, index) => {
+      const factionId = factionSequence[index].id;
+      const factionIndex = factionCounters[factionId]++;
+      const realNames = REAL_MDBS[factionId] || [];
+      const seatName = factionIndex < realNames.length 
+        ? `Abg. ${realNames[factionIndex]}` 
+        : `Abg. ${FALLBACK_LAST_NAMES[factionIndex % FALLBACK_LAST_NAMES.length]}`;
+
+      return {
+        id: globalIdCounter++, x: geo.x, y: geo.y, angle: geo.angle, row: geo.row,
+        faction: factionSequence[index], name: seatName, status: 'idle', warnings: 0, vote: null
+      };
+    });
+
+    GOV_NAMES.forEach((name, i) => {
+      generatedSeats.push({
+        id: globalIdCounter++, x: 630 + ((i % 8) * 24), y: 560 + (Math.floor(i / 8) * 28), angle: 0, row: -1,
+        faction: { id: 'regierung', name: 'Bundesregierung', color: '#0f172a' }, name, status: 'idle', warnings: 0, vote: null
+      });
+    });
+
+    BUNDESRAT_NAMES.forEach((name, i) => {
+      generatedSeats.push({
+        id: globalIdCounter++, x: 370 - ((i % 8) * 24), y: 560 + (Math.floor(i / 8) * 28), angle: 180, row: -1,
+        faction: { id: 'bundesrat', name: 'Bundesrat', color: '#475569' }, name, status: 'idle', warnings: 0, vote: null
+      });
+    });
+
+    setSeats(generatedSeats);
+  }, []);
+
+  // --- Timer & Redezeiterfassung ---
+  useEffect(() => {
+    let interval;
+    if (timer.active && timer.seconds > 0) {
+      interval = setInterval(() => {
+        setTimer(prev => ({ ...prev, seconds: prev.seconds - 1 }));
+        
+        // Redezeit der Fraktion gutschreiben
+        if (activeSpeakerId) {
+          const speaker = seats.find(s => s.id === activeSpeakerId);
+          if (speaker && speaker.faction.id !== 'regierung' && speaker.faction.id !== 'bundesrat') {
+             setSpeakingTimes(prev => ({
+               ...prev,
+               [speaker.faction.id]: (prev[speaker.faction.id] || 0) + 1
+             }));
+          }
+        }
+
+      }, 1000);
+    } else if (timer.seconds === 0 && timer.active) {
+      setTimer(prev => ({ ...prev, active: false }));
+      addProtocolEntry('warning', 'Redezeit ist abgelaufen!');
+    }
+    return () => clearInterval(interval);
+  }, [timer.active, timer.seconds, activeSpeakerId, seats]);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // --- Helper & Actions ---
+  useEffect(() => {
+    if (protocolEndRef.current) protocolEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [protocol]);
+
+  const addProtocolEntry = (type, message, seat = null) => {
+    const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second:'2-digit' });
+    setProtocol(prev => [...prev, { id: Date.now() + Math.random(), time, type, message, seat }]);
+  };
+
+  const activeTop = agenda.find(a => a.status === 'active');
+
+  const handleGrantWord = (targetId = selectedSeatId) => {
+    if (!targetId) return;
+    const seat = seats.find(s => s.id === targetId);
+    if (seat.status === 'excluded') {
+      alert("Einem ausgeschlossenen Mitglied kann das Wort nicht erteilt werden.");
+      return;
+    }
+
+    setSeats(prev => prev.map(s => {
+      if (s.id === targetId) return { ...s, status: 'speaking' };
+      if (s.status === 'speaking') return { ...s, status: 'idle' };
+      return s;
+    }));
+    
+    setActiveSpeakerId(targetId);
+    setSpeakerQueue(prev => prev.filter(id => id !== targetId)); // Aus Warteschlange entfernen
+    
+    let msg = `Wort erteilt an ${seat.name} (${seat.faction.name})`;
+    if (activeTop) msg += ` zu TOP ${activeTop.top}`;
+    addProtocolEntry('success', msg, seat);
+  };
+
+  const handleRevokeWord = () => {
+    if (!activeSpeakerId) return;
+    const seat = seats.find(s => s.id === activeSpeakerId);
+    setSeats(prev => prev.map(s => s.id === activeSpeakerId ? { ...s, status: 'idle' } : s));
+    setActiveSpeakerId(null);
+    setTimer(prev => ({...prev, active: false})); // Timer stoppen
+    addProtocolEntry('warning', `Wort entzogen: ${seat.name}`, seat);
+  };
+
+  const handleCallToOrder = () => {
+    if (!selectedSeatId) return;
+    const seat = seats.find(s => s.id === selectedSeatId);
+    setSeats(prev => prev.map(s => s.id === selectedSeatId ? { ...s, warnings: s.warnings + 1 } : s));
+    addProtocolEntry('danger', `Ordnungsruf erteilt an ${seat.name} (${seat.faction.name}). Rügen: ${seat.warnings + 1}`, seat);
+  };
+
+  const handleExclude = () => {
+    if (!selectedSeatId) return;
+    const seat = seats.find(s => s.id === selectedSeatId);
+    setSeats(prev => prev.map(s => s.id === selectedSeatId ? { ...s, status: 'excluded', warnings: s.warnings + 1 } : s));
+    if (activeSpeakerId === selectedSeatId) handleRevokeWord();
+    setSpeakerQueue(prev => prev.filter(id => id !== selectedSeatId));
+    addProtocolEntry('critical', `Sitzungsausschluss für ${seat.name} (${seat.faction.name}) verhängt.`, seat);
+  };
+
+  const handleRingBell = () => {
+    setBellRinging(true);
+    addProtocolEntry('danger', 'Die Sitzungsglocke wurde geläutet. Das Präsidium bittet um Ruhe.');
+    setTimeout(() => setBellRinging(false), 2500);
+  };
+
+  const toggleTopStatus = (id, newStatus) => {
+    setAgenda(prev => prev.map(item => {
+      if (item.id === id) return { ...item, status: newStatus };
+      // Wenn einer aktiv gesetzt wird, alle anderen auf completed/pending setzen falls sie aktiv waren
+      if (newStatus === 'active' && item.status === 'active') return { ...item, status: 'completed' };
+      return item;
+    }));
+    const item = agenda.find(a => a.id === id);
+    if (newStatus === 'active') addProtocolEntry('info', `Aufgerufen: TOP ${item.top} - ${item.title}`);
+  };
+
+  const addToQueue = (seatId) => {
+    if (!seatId || speakerQueue.includes(seatId)) return;
+    const seat = seats.find(s => s.id === seatId);
+    if (seat.status === 'excluded') return;
+    setSpeakerQueue(prev => [...prev, seatId]);
+  };
+
+  // --- Abgeleitete Daten ---
+  const selectedSeat = seats.find(s => s.id === selectedSeatId);
+  const activeSpeaker = seats.find(s => s.id === activeSpeakerId);
+  const searchMatchIds = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return seats.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map(s => s.id);
+  }, [searchQuery, seats]);
+
+
+  // ==========================================
+  // VIEW: PLENARSAAL (Hauptansicht)
+  // ==========================================
+  const renderPlenumView = () => (
+    <div className="flex-1 flex overflow-hidden">
+      {/* LEFT: VISUALISIERUNG PLENARSAAL */}
+      <div className={`flex-[2] bg-white m-4 rounded-xl shadow-sm border border-slate-200 flex flex-col relative overflow-hidden transition-colors duration-300 ${bellRinging ? 'ring-4 ring-red-500 bg-red-50/10' : ''}`}>
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div className="flex items-center gap-4">
+            <h2 className="font-semibold text-slate-700">Sitzplan & Mikrofonsteuerung</h2>
+            {votingMode && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full animate-pulse">Abstimmungsmodus aktiv</span>}
+          </div>
+          <div className="flex items-center gap-4">
+            {/* Suchfeld im Panel */}
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input 
+                type="text" 
+                placeholder="Suche..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-48 pl-8 pr-3 py-1 bg-white border border-slate-200 rounded-full text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-3 text-xs text-slate-500">
+               <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> Spricht</span>
+               <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500"></div> Rüge</span>
+               <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-300"></div> Ausgeschlossen</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-slate-50 relative">
+          <svg viewBox="0 0 1000 650" className="w-full h-full max-h-[70vh] drop-shadow-sm">
+            {/* Bänke & Tische */}
+            <rect x="180" y="545" width="205" height="55" rx="4" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+            <text x="282" y="538" textAnchor="middle" className="text-[10px] font-semibold fill-slate-400 uppercase tracking-wider">Bundesrat</text>
+            <rect x="615" y="545" width="205" height="55" rx="4" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+            <text x="717" y="538" textAnchor="middle" className="text-[10px] font-semibold fill-slate-400 uppercase tracking-wider">Bundesregierung</text>
+            <rect x="440" y="580" width="120" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="2"/>
+            <text x="500" y="605" textAnchor="middle" className="text-sm font-semibold fill-slate-500">Präsidium</text>
+            <rect x="475" y="535" width="50" height="20" rx="4" fill={activeSpeaker ? '#22c55e' : '#3b82f6'} opacity={activeSpeaker ? "1" : "0.2"} />
+            <text x="500" y="549" textAnchor="middle" className={`text-[10px] font-bold ${activeSpeaker ? 'fill-white' : 'fill-blue-700'}`}>Pult</text>
+
+            {/* Sitze Rendern */}
+            {seats.map(seat => {
+              const isSelected = seat.id === selectedSeatId;
+              const isSpeaking = seat.id === activeSpeakerId;
+              const isExcluded = seat.status === 'excluded';
+              const isSearched = searchMatchIds.includes(seat.id);
+              const isQueued = speakerQueue.includes(seat.id);
+              
+              let fillColor = seat.faction.color;
+              if (isExcluded) fillColor = '#e2e8f0';
+              else if (votingMode && seat.vote) {
+                if (seat.vote === 'yes') fillColor = '#22c55e';
+                else if (seat.vote === 'no') fillColor = '#ef4444';
+                else fillColor = '#94a3b8';
+              }
+              
+              let strokeColor = 'transparent';
+              let strokeWidth = 0;
+              
+              if (isSearched) { strokeColor = '#eab308'; strokeWidth = 3; } 
+              else if (isSelected) { strokeColor = '#3b82f6'; strokeWidth = 3; } 
+              else if (isSpeaking) { strokeColor = '#22c55e'; strokeWidth = 3; }
+              else if (isQueued) { strokeColor = '#a855f7'; strokeWidth = 2; } // Lila Rand für Redner in Warteschlange
+
+              return (
+                <g key={seat.id} onClick={() => !votingMode && setSelectedSeatId(seat.id)} className={`${votingMode ? 'cursor-default' : 'cursor-pointer transition-transform hover:scale-110'}`} style={{ transformOrigin: `${seat.x}px ${seat.y}px` }}>
+                  <circle cx={seat.x} cy={seat.y} r={isSelected || isSearched ? 7 : 5} fill={fillColor} stroke={strokeColor} strokeWidth={strokeWidth} className="transition-all duration-300" />
+                  {seat.warnings > 0 && !isExcluded && !votingMode && <circle cx={seat.x + 4} cy={seat.y - 4} r={2.5} fill="#eab308" stroke="#fff" strokeWidth={1} />}
+                  {(isSpeaking || isSearched) && <circle cx={seat.x} cy={seat.y} r={9} fill="none" stroke={isSearched ? '#eab308' : '#22c55e'} strokeWidth="1.5" className="animate-ping opacity-75" />}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+
+      {/* RIGHT: CONTROLS */}
+      <div className="flex-[1] flex flex-col m-4 ml-0 gap-4 min-w-[350px] max-w-[400px]">
+        {/* Sitz-Aktionen */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h2 className="font-semibold text-slate-700 flex items-center gap-2"><Info size={18} /> Platzsteuerung</h2>
+          </div>
+          <div className="p-5 flex-1">
+            {!selectedSeat ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center gap-3 py-6">
+                <UserX size={48} className="opacity-20" />
+                <p>Platz im Plenarsaal auswählen.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="text-xl font-bold text-slate-800">{selectedSeat.name}</h3>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: selectedSeat.faction.color }}></div>
+                    <span className="text-sm font-medium text-slate-600">{selectedSeat.faction.name}</span>
+                  </div>
+                  {selectedSeat.warnings > 0 && <span className="inline-block mt-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded border border-yellow-200">{selectedSeat.warnings} Ordnungsruf(e)</span>}
+                  {selectedSeat.status === 'excluded' && <span className="inline-block mt-2 px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded border border-red-200">Ausgeschlossen</span>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => handleGrantWord()} disabled={selectedSeat.status === 'speaking' || selectedSeat.status === 'excluded'}
+                    className="col-span-2 flex items-center justify-center gap-2 py-2 px-4 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded transition-colors"
+                  ><Mic size={16} /> Wort erteilen</button>
+                  <button 
+                    onClick={() => addToQueue(selectedSeat.id)} disabled={speakerQueue.includes(selectedSeat.id) || selectedSeat.status === 'excluded'}
+                    className="col-span-2 flex items-center justify-center gap-2 py-2 px-4 bg-purple-100 hover:bg-purple-200 text-purple-700 disabled:opacity-50 font-semibold rounded transition-colors"
+                  ><ListOrdered size={16} /> Auf Rednerliste setzen</button>
+                  
+                  <button onClick={handleCallToOrder} disabled={selectedSeat.status === 'excluded'} className="flex flex-col items-center gap-1 py-2 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 text-yellow-700 font-semibold rounded transition-colors disabled:opacity-50"><AlertOctagon size={18} /><span className="text-xs">Ordnungsruf</span></button>
+                  <button onClick={handleExclude} disabled={selectedSeat.status === 'excluded'} className="flex flex-col items-center gap-1 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-semibold rounded transition-colors disabled:opacity-50"><ShieldAlert size={18} /><span className="text-xs">Ausschluss</span></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Global Controls / Timer */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+           <p className="text-xs font-semibold text-slate-500 uppercase mb-3">Globale Steuerung</p>
+           <div className="space-y-3">
+             <button onClick={handleRingBell} className="w-full flex items-center justify-center gap-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded transition-colors"><BellRing size={16} /> Sitzungsglocke läuten</button>
+             {activeSpeakerId && (
+                <button onClick={handleRevokeWord} className="w-full flex items-center justify-center gap-2 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded transition-colors"><MicOff size={16} /> {activeSpeaker?.name} Wort entziehen</button>
+             )}
+           </div>
+           
+           <hr className="my-4 border-slate-100" />
+           <div className="flex items-center justify-between mb-2">
+             <span className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Timer size={16}/> Redezeit Uhr</span>
+             <span className="font-mono font-bold text-lg">{formatTime(timer.seconds)}</span>
+           </div>
+           <div className="flex gap-2">
+              <button onClick={() => setTimer(p => ({...p, active: !p.active}))} className="flex-1 py-1.5 bg-slate-100 rounded text-sm font-medium hover:bg-slate-200">{timer.active ? 'Pause' : 'Start'}</button>
+              <button onClick={() => setTimer(p => ({...p, seconds: p.seconds + 60}))} className="flex-1 py-1.5 bg-slate-100 rounded text-sm font-medium hover:bg-slate-200">+1 Min</button>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ==========================================
+  // VIEW: REDNERLISTE
+  // ==========================================
+  const renderSpeakersView = () => (
+    <div className="flex-1 m-6 flex gap-6 overflow-hidden">
+      <div className="flex-[2] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+        <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ListOrdered size={20} /> Rednerliste</h2>
+          <span className="px-3 py-1 bg-purple-100 text-purple-800 font-semibold rounded-full text-sm">{speakerQueue.length} in Warteschlange</span>
+        </div>
+        <div className="flex-1 p-5 overflow-y-auto space-y-3">
+          {speakerQueue.length === 0 ? (
+            <div className="h-full flex flex-col justify-center items-center text-slate-400 gap-3">
+              <ListOrdered size={48} className="opacity-20" />
+              <p>Die Rednerliste ist leer. Fügen Sie über den Sitzplan oder die Suche Redner hinzu.</p>
+            </div>
+          ) : (
+            speakerQueue.map((id, index) => {
+              const s = seats.find(seat => seat.id === id);
+              if(!s) return null;
+              return (
+                <div key={id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 border border-slate-200">{index + 1}</div>
+                    <div>
+                      <p className="font-bold text-slate-800 text-lg">{s.name}</p>
+                      <p className="text-sm font-medium" style={{color: s.faction.color}}>{s.faction.name}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleGrantWord(id)} className="px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 flex items-center gap-2"><Mic size={16}/> Wort erteilen</button>
+                    <button onClick={() => setSpeakerQueue(prev => prev.filter(qId => qId !== id))} className="p-2 text-slate-400 hover:bg-slate-100 hover:text-red-500 rounded"><XIcon size={20}/></button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+      
+      <div className="flex-[1] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-5">
+         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><PlusCircle size={18}/> Redner manuell hinzufügen</h3>
+         <p className="text-sm text-slate-500 mb-4">Suchen Sie nach Abgeordneten, um sie auf die Liste zu setzen.</p>
+         
+         <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Name eingeben..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-500"
+            />
+         </div>
+         
+         <div className="flex-1 overflow-y-auto border border-slate-100 rounded space-y-1 p-2">
+            {searchQuery.length > 1 ? searchMatchIds.slice(0, 10).map(id => {
+              const s = seats.find(seat => seat.id === id);
+              const inQueue = speakerQueue.includes(id);
+              return (
+                <div key={id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded text-sm">
+                  <span><span className="font-semibold">{s.name}</span> <span className="text-slate-400">({s.faction.id.toUpperCase()})</span></span>
+                  <button onClick={() => addToQueue(id)} disabled={inQueue} className="px-2 py-1 bg-slate-100 text-slate-600 rounded hover:bg-blue-100 hover:text-blue-700 disabled:opacity-50 text-xs font-bold">{inQueue ? 'Auf Liste' : 'Hinzufügen'}</button>
+                </div>
+              )
+            }) : <p className="text-xs text-center text-slate-400 py-4">Bitte Namen eingeben</p>}
+         </div>
+      </div>
+    </div>
+  );
+
+  // ==========================================
+  // VIEW: TAGESORDNUNG
+  // ==========================================
+  const renderAgendaView = () => (
+    <div className="flex-1 m-6 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen size={24} /> Tagesordnung (Auszug)</h2>
+          <p className="text-sm text-slate-500 mt-1">Sitzung {sessionInfo.number}</p>
+        </div>
+      </div>
+      <div className="p-6 overflow-y-auto space-y-4">
+        {agenda.map(item => (
+          <div key={item.id} className={`flex items-center justify-between p-5 border rounded-lg ${item.status === 'active' ? 'border-blue-500 bg-blue-50 shadow-sm' : item.status === 'completed' ? 'border-slate-200 bg-slate-50/50 opacity-75' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+            <div className="flex items-center gap-6">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${item.status === 'active' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                {item.status === 'completed' ? <Check size={20} /> : item.top}
+              </div>
+              <div>
+                <h3 className={`font-bold text-lg ${item.status === 'completed' ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-800'}`}>{item.title}</h3>
+                <p className="text-sm font-medium mt-1">Status: {item.status === 'active' ? <span className="text-blue-600">Aktueller Verhandlungsgegenstand</span> : item.status === 'completed' ? 'Abgeschlossen' : 'Ausstehend'}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+               {item.status !== 'active' && item.status !== 'completed' && (
+                 <button onClick={() => toggleTopStatus(item.id, 'active')} className="px-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded hover:bg-blue-200">Als 'Aktiv' setzen</button>
+               )}
+               {item.status === 'active' && (
+                 <button onClick={() => toggleTopStatus(item.id, 'completed')} className="px-4 py-2 bg-green-600 text-white font-semibold rounded hover:bg-green-700 flex items-center gap-2"><Check size={16}/> Abschließen</button>
+               )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ==========================================
+  // VIEW: STATISTIKEN
+  // ==========================================
+  const renderStatsView = () => {
+    const totalWarnings = seats.reduce((acc, s) => acc + s.warnings, 0);
+    const totalExcluded = seats.filter(s => s.status === 'excluded').length;
+    
+    // Sortiere Redezeit
+    const sortedTimes = Object.entries(speakingTimes)
+       .map(([id, secs]) => ({ faction: seats.find(s=>s.faction.id === id)?.faction, secs }))
+       .filter(t => t.faction)
+       .sort((a,b) => b.secs - a.secs);
+
+    return (
+      <div className="flex-1 m-6 overflow-y-auto">
+        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><BarChart3 size={28} /> Sitzungs-Auswertung</h2>
+        
+        <div className="grid grid-cols-3 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+             <div className="p-4 bg-yellow-100 text-yellow-700 rounded-full"><AlertOctagon size={32} /></div>
+             <div><p className="text-sm font-bold text-slate-500 uppercase">Erteilte Ordnungsrufe</p><p className="text-3xl font-black text-slate-800">{totalWarnings}</p></div>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+             <div className="p-4 bg-red-100 text-red-700 rounded-full"><ShieldAlert size={32} /></div>
+             <div><p className="text-sm font-bold text-slate-500 uppercase">Sitzungsausschlüsse</p><p className="text-3xl font-black text-slate-800">{totalExcluded}</p></div>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+             <div className="p-4 bg-blue-100 text-blue-700 rounded-full"><History size={32} /></div>
+             <div><p className="text-sm font-bold text-slate-500 uppercase">Protokoll-Einträge</p><p className="text-3xl font-black text-slate-800">{protocol.length}</p></div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
+           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Clock size={18} /> Redezeit nach Fraktionen</h3>
+             {sortedTimes.length === 0 ? <p className="text-slate-500 text-sm">Noch keine Redezeiten erfasst.</p> : (
+               <div className="space-y-4">
+                 {sortedTimes.map((item, i) => (
+                   <div key={i}>
+                     <div className="flex justify-between text-sm font-bold mb-1">
+                       <span style={{color: item.faction.color}}>{item.faction.name}</span>
+                       <span className="text-slate-600">{formatTime(item.secs)} Min.</span>
+                     </div>
+                     <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                       <div className="h-full" style={{width: `${Math.min(100, (item.secs / sortedTimes[0].secs) * 100)}%`, backgroundColor: item.faction.color}}></div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             )}
+           </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ==========================================
+  // HAUPT-LAYOUT (Mit Sidebar/Protokoll)
+  // ==========================================
+  return (
+    <div className="h-screen bg-slate-100 flex flex-col font-sans text-slate-800 overflow-hidden">
+      
+      {/* --- GLOBAL TOP NAV BAR --- */}
+      <header className="bg-[#0f172a] text-white px-4 h-16 flex justify-between items-center shadow-md z-20 shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
+            <div className="bg-blue-600 p-1.5 rounded-md"><Gavel size={20} /></div>
+            <div>
+              <h1 className="text-base font-bold leading-tight">Bundestag Dashboard</h1>
+              <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Präsidialsystem V2</p>
+            </div>
+          </div>
+          
+          <nav className="flex gap-1">
+            <button onClick={() => setActiveTab('plenum')} className={`px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 ${activeTab === 'plenum' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}><Users size={16}/> Plenarsaal</button>
+            <button onClick={() => setActiveTab('agenda')} className={`px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 ${activeTab === 'agenda' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}><BookOpen size={16}/> Tagesordnung</button>
+            <button onClick={() => setActiveTab('speakers')} className={`px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 relative ${activeTab === 'speakers' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <ListOrdered size={16}/> Rednerliste
+              {speakerQueue.length > 0 && <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-purple-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{speakerQueue.length}</span>}
+            </button>
+            <button onClick={() => setActiveTab('stats')} className={`px-4 py-2 rounded-md font-medium text-sm transition-colors flex items-center gap-2 ${activeTab === 'stats' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}><BarChart3 size={16}/> Auswertung</button>
+          </nav>
+        </div>
+        
+        <div className="flex items-center gap-6">
+          <div className="text-right border-r border-slate-700 pr-6">
+            <p className="text-xs text-slate-400 uppercase font-bold">Vorsitz</p>
+            <p className="text-sm font-semibold">{sessionInfo.president}</p>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className={`flex items-center gap-2 px-3 py-1 rounded bg-slate-800 border ${activeSpeaker ? 'border-green-500 text-green-400' : 'border-slate-700 text-slate-400'}`}>
+               {activeSpeaker ? <Mic size={14} className="animate-pulse" /> : <MicOff size={14} />}
+               <span className="text-xs font-bold w-24 truncate">{activeSpeaker ? activeSpeaker.name : 'Kein Redner'}</span>
+             </div>
+             <div className="text-right ml-2">
+                <p className="font-mono text-base font-bold">{new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}</p>
+             </div>
+          </div>
+        </div>
+      </header>
+
+      {/* --- STATUS BAR UNTER TOP NAV --- */}
+      <div className="bg-white border-b border-slate-200 h-10 px-6 flex justify-between items-center text-xs font-bold text-slate-600 shrink-0 shadow-sm">
+         <div className="flex items-center gap-2">
+           <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Sitzung {sessionInfo.number}</span>
+           <ChevronRight size={14} className="text-slate-400" />
+           {activeTop ? (
+             <span className="text-blue-600">Aktiv: TOP {activeTop.top} - {activeTop.title}</span>
+           ) : (
+             <span className="text-slate-400">Kein TOP aufgerufen</span>
+           )}
+         </div>
+         {timer.active && (
+           <div className="flex items-center gap-2 text-red-600 animate-pulse">
+             <Timer size={14} /> Restredezeit: {formatTime(timer.seconds)}
+           </div>
+         )}
+      </div>
+
+      {/* --- MAIN CONTENT BEREICH --- */}
+      <main className="flex-1 flex overflow-hidden">
+        
+        {/* Dynamischer Content Bereich je nach Tab */}
+        <div className="flex-1 flex overflow-hidden">
+          {activeTab === 'plenum' && renderPlenumView()}
+          {activeTab === 'speakers' && renderSpeakersView()}
+          {activeTab === 'agenda' && renderAgendaView()}
+          {activeTab === 'stats' && renderStatsView()}
+        </div>
+
+        {/* Globales Protokoll (Immer sichtbar am rechten Rand) */}
+        <div className="w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-10">
+          <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+            <h2 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><History size={16} /> Live-Protokoll</h2>
+            <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 rounded text-slate-600">{protocol.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
+            {protocol.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">Sitzung eröffnet. Protokoll zeichnet auf.</p>
+            ) : (
+              protocol.map(entry => (
+                <div key={entry.id} className={`bg-white border border-slate-100 p-2.5 rounded shadow-sm text-xs animate-fade-in ${entry.type === 'danger' ? 'border-l-2 border-l-red-500' : entry.type === 'success' ? 'border-l-2 border-l-green-500' : entry.type === 'info' ? 'border-l-2 border-l-blue-500' : ''}`}>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-mono text-[10px] text-slate-400">{entry.time}</span>
+                  </div>
+                  <p className="text-slate-700 leading-snug">{entry.message}</p>
+                </div>
+              ))
+            )}
+            <div ref={protocolEndRef} />
+          </div>
+        </div>
+        
+      </main>
+
+    </div>
+  );
+}
