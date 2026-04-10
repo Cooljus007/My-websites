@@ -1,0 +1,38 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, Segoe UI, sans-serif;
+  background: #0b111a;
+  color: #deebff;
+}
+body { margin: 0; background: radial-gradient(circle at top, #111c2f, #0b111a); }
+.layout { padding: 16px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.topbar h1 { font-size: 1.2rem; letter-spacing: 0.08em; color: #9cc2ff; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap: 10px; width: 60%; }
+.stat { background: #141f31; border: 1px solid #21324f; border-radius: 12px; padding: 10px; }
+.stat span { color: #86a8da; display: block; font-size: .8rem; }
+.stat strong { font-size: 1.2rem; }
+.filters { margin: 12px 0; display: flex; gap: 8px; }
+.filters input, .filters select, .filters button, .call-form input, .call-form select, .call-form textarea, .chat-form input, .chat-form button, .item select {
+  background: #10192a; color: #e5eeff; border: 1px solid #233554; border-radius: 8px; padding: 8px;
+}
+.grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
+.panel { background: rgba(18, 27, 43, 0.95); border: 1px solid #22375c; border-radius: 14px; padding: 12px; }
+.call-form { display: grid; gap: 8px; margin-bottom: 12px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.list { display: grid; gap: 8px; max-height: 300px; overflow: auto; }
+.item { display: flex; align-items: center; justify-content: space-between; background: #0f1726; border: 1px solid #22314d; border-radius: 10px; padding: 8px; }
+.item p { margin: 2px 0 0; color: #9ab4db; font-size: .85rem; }
+.priority-critical { border-color: #ff4e66; }
+.priority-high { border-color: #ff8b3d; }
+.priority-medium { border-color: #3f8cff; }
+.chat { min-height: 120px; max-height: 140px; overflow: auto; border: 1px solid #22314d; border-radius: 8px; padding: 8px; background: #0e1624; }
+.chat p { margin: 0 0 6px; }
+.chat-form { display: flex; gap: 8px; margin-top: 8px; }
+.users { margin: 8px 0 0; padding-left: 16px; color: #9ab4db; }
+.activity { grid-column: span 2; }
+.item.slim { display:block; }
+@media (max-width: 1100px) {
+  .grid, .stats { grid-template-columns: 1fr; width: 100%; }
+  .activity { grid-column: span 1; }
+}
