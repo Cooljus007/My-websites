@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fake Finanzguru App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>💸 Fake Finanzguru</h1>
+      <p>Demo-Ansicht für Einnahmen, Ausgaben und Budgets</p>
+    </header>
+
+    <section class="mobile-hint card">
+      <h2>Auf dem Handy öffnen</h2>
+      <p>Wenn der Server läuft, nutze auf dem Smartphone (gleiches WLAN):</p>
+      <code id="mobile-url">http://DEINE-IP:8080/fake-finanzguru/</code>
+    </section>
+
+    <main class="container">
+      <section class="kpi-grid">
+        <article class="card">
+          <h2>Kontostand</h2>
+          <p id="balance" class="value">0,00 €</p>
+        </article>
+        <article class="card">
+          <h2>Monatliche Einnahmen</h2>
+          <p id="income" class="value positive">0,00 €</p>
+        </article>
+        <article class="card">
+          <h2>Monatliche Ausgaben</h2>
+          <p id="expenses" class="value negative">0,00 €</p>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Transaktion hinzufügen</h2>
+        <form id="transaction-form" class="form-grid">
+          <input id="title" type="text" placeholder="Titel (z. B. Supermarkt)" required />
+          <input id="amount" type="number" step="0.01" placeholder="Betrag" required />
+          <select id="type" required>
+            <option value="expense">Ausgabe</option>
+            <option value="income">Einnahme</option>
+          </select>
+          <button type="submit">Speichern</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Letzte Transaktionen</h2>
+        <ul id="transactions" class="transactions"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
